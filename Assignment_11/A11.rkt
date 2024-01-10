@@ -3,7 +3,6 @@
 (require "../chez-init.rkt")
 (provide bintree-to-list bintree-add leaf-node interior-node parse-exp unparse-exp)
 
-
 (define-datatype bintree bintree?
   (leaf-node
    (datum number?))
@@ -44,7 +43,7 @@
    (body expression?)]
   [app-exp
    (rator expression?)
-   (rand expression?)]
+   (rand (list-of? expression?))]
   [let-exp
    (syms (list-of? symbol?))
    (vals (list-of? expression?))
@@ -56,9 +55,14 @@
   [letrec-exp
    (syms (list-of? symbol?))
    (vals (list-of? expression?))
-   (body expression?)
-   ]
-
+   (body expression?)]
+  [if-else-exp
+   (condition expression?)
+   (true expression?)
+   (false expression?)]
+  [if-exp
+   (condition expression?)
+   (true expression?)]
   )
 
 ; Procedures to make the parser a little bit saner.
@@ -77,13 +81,24 @@
           (cond [(= (length datum) 3)
                  (lambda-exp (car (2nd  datum))
                       (parse-exp (3rd datum)))])]
+         [(eqv? (car datum) 'if)
+          (cond [(= (length datum) 4)
+                 (if-else-exp (parse-exp (car (2nd datum)))
+                         (parse-exp (3rd datum))
+                         (parse-exp (last datum)))]
+                [(= (length datum) 3)
+                 (if-exp (parse-exp (2nd datum))
+                         (parse-exp (last datum)))])]
          [else (app-exp (parse-exp (1st datum))
-                        (parse-exp (2nd datum)))])]
+                        (map parse-exp (cdr datum)))])]
       [else (error 'parse-exp "bad expression: ~s" datum)])))
 
 (define unparse-exp
   (lambda (exp)
-    (nyi)))
+    (cases expression exp ;; We won't get credit without using cases | provide the expression that you are looking for in EXP, that is what cases is searching for
+      (var-exp (id) id)
+      (if-exp (condition true) (list 'if condition true)))))
+       
 
 ; An auxiliary procedure that could be helpful.
 (define var-exp?
