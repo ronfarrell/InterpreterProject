@@ -2,6 +2,7 @@
 
 (require "../chez-init.rkt")
 (provide bintree-to-list bintree-add leaf-node interior-node parse-exp unparse-exp)
+(require racket/trace)
 
 (define-datatype bintree bintree?
   (leaf-node
@@ -73,15 +74,16 @@
 (define 2nd cadr)
 (define 3rd caddr)
 
-(define parse-exp         
+(trace-define parse-exp         
   (lambda (datum)
     (cond
       [(symbol? datum) (var-exp datum)]
-      [(number? datum) (lit-exp datum)]
-      [(list? datum)
+      [(pair? datum)
        (cond
-         [(and (pair? datum) (not (list? datum))) (error 'parse-exp "prase-error")]
+         [(and (pair? datum) (not (list? datum))) (error 'parse-exp "parse-error")]
+         
          [(eqv? (car datum) 'set!) (if (eqv? (length datum) 3) (set!-exp (2nd datum) (parse-exp (3rd datum))) (error 'parse-exp "parse-error"))]
+         
          [(eqv? (car datum) 'lambda)
           (cond [(< (length datum) 3) (error 'parse-exp "parse-error")]
                 [(symbol? (2nd datum)) (lambda-exp (2nd datum) (map parse-exp (cddr datum)))]
@@ -89,6 +91,7 @@
                  (lambda-exp (2nd datum)
                    (map parse-exp (cddr datum)))];parsing the rest of the lambda
                 [else (error 'parse-exp "parse-error")])]
+         
          [(eqv? (car datum) 'if)
           (cond [(= (length datum) 4)
                  (if-else-exp (parse-exp (car (2nd datum)))
@@ -96,22 +99,45 @@
                          (parse-exp (last datum)))]
                 [(= (length datum) 3)
                  (if-exp (parse-exp (2nd datum))
-                         (parse-exp (last datum)))])]
+                         (parse-exp (last datum)))]
+                [else (error 'parse-exp "parse-error")])]
 
          ;lets
          [(eqv? (1st datum) 'let)
-          (if (or (not(list? (2nd datum))) (not (= (length datum) 3)))
+          (if (< (length datum) 3)
               (error 'parse-exp "parse-error") ;not valid
-              (let-exp (parse-exp (2nd datum)) (parse-exp (3rd datum))));valid
+              (if (not (list? (2nd datum)))
+                  (error 'parse-exp "parse-error")
+                  (if (not (lst-2 (2nd datum)))
+                      (error 'parse-exp "parse-error")
+                      (let-exp (parse-exp (1st datum)) (parse-exp (2nd datum)) (parse-exp (3rd datum))))))];valid
+         
+          [(eqv? (1st datum) 'letrec)
+          (if (< (length datum) 3)
+              (error 'parse-exp "parse-error") ;not valid
+              (if (not (list? (2nd datum)))
+                  (error 'parse-exp "parse-error")
+                  (if (not (lst-2 (2nd datum)))
+                      (error 'parse-exp "parse-error")
+                      (let-exp (parse-exp (1st datum)) (parse-exp (2nd datum)) (parse-exp (3rd datum))))))];valid
           
           
-          ];returning #f is just filler for now
-         [(eqv? (1st datum) 'letrec) #f];returning #f is just filler for now
-         [(eqv? (1st datum) 'let*) #f];returning #f is just filler for now
-         [else (app-exp (parse-exp (1st datum))
-                        (map parse-exp (cdr datum)))]
+          ;returning #f is just filler for now
+         [(eqv? (1st datum) 'let*) "parse-error"];returning #f is just filler for now
+         [(if (list? datum)
+              (app-exp (parse-exp (1st datum))
+                        (map parse-exp (cdr datum)))
+              (error 'parse-exp "parse-error"))]
          )]
-      [else (error 'parse-exp "bad expression: ~s" datum)])))
+      [else (lit-exp datum)])))
+
+(trace-define lst-2
+  (lambda (lst)
+    (cond [(null? lst) #t]
+          [(not (list? (car lst))) #f]
+          [(not (symbol? (caar lst))) #f]
+          [(= (length (car lst)) 2) (lst-2 (cdr lst))]
+          [else #f])))
 
 (define unparse-exp
   (lambda (exp)
