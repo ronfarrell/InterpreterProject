@@ -63,6 +63,9 @@
   [if-exp
    (condition expression?)
    (true expression?)]
+  [set!-exp
+   (val symbol?)
+   (assign expression?)]
   )
 
 ; Procedures to make the parser a little bit saner.
@@ -75,12 +78,17 @@
     (cond
       [(symbol? datum) (var-exp datum)]
       [(number? datum) (lit-exp datum)]
-      [(pair? datum)
+      [(list? datum)
        (cond
+         [(and (pair? datum) (not (list? datum))) (error 'parse-exp "prase-error")]
+         [(eqv? (car datum) 'set!) (if (eqv? (length datum) 3) (set!-exp (2nd datum) (parse-exp (3rd datum))) (error 'parse-exp "parse-error"))]
          [(eqv? (car datum) 'lambda)
-          (cond [(= (length datum) 3)
-                 (lambda-exp (car (2nd  datum))
-                      (parse-exp (3rd datum)))])]
+          (cond [(< (length datum) 3) (error 'parse-exp "parse-error")]
+                [(symbol? (2nd datum)) (lambda-exp (2nd datum) (map parse-exp (cddr datum)))]
+                [(valid-args? (2nd datum))
+                 (lambda-exp (2nd datum)
+                   (map parse-exp (cddr datum)))];parsing the rest of the lambda
+                [else (error 'parse-exp "parse-error")])]
          [(eqv? (car datum) 'if)
           (cond [(= (length datum) 4)
                  (if-else-exp (parse-exp (car (2nd datum)))
@@ -89,8 +97,20 @@
                 [(= (length datum) 3)
                  (if-exp (parse-exp (2nd datum))
                          (parse-exp (last datum)))])]
+
+         ;lets
+         [(eqv? (1st datum) 'let)
+          (if (or (not(list? (2nd datum))) (not (= (length datum) 3)))
+              (error 'parse-exp "parse-error") ;not valid
+              (let-exp (parse-exp (2nd datum)) (parse-exp (3rd datum))));valid
+          
+          
+          ];returning #f is just filler for now
+         [(eqv? (1st datum) 'letrec) #f];returning #f is just filler for now
+         [(eqv? (1st datum) 'let*) #f];returning #f is just filler for now
          [else (app-exp (parse-exp (1st datum))
-                        (map parse-exp (cdr datum)))])]
+                        (map parse-exp (cdr datum)))]
+         )]
       [else (error 'parse-exp "bad expression: ~s" datum)])))
 
 (define unparse-exp
@@ -98,7 +118,19 @@
     (cases expression exp ;; We won't get credit without using cases | provide the expression that you are looking for in EXP, that is what cases is searching for
       (var-exp (id) id)
       (if-exp (condition true) (list 'if condition true)))))
-       
+
+
+
+
+;helper procs
+(define valid-args?
+  (lambda (args)
+  (cond
+    [(null? args) #t]
+    [(symbol? args) #t]
+    [(and (list? args) (symbol? (1st args)))
+     (valid-args? (cdr args))]
+    [else #f])))
 
 ; An auxiliary procedure that could be helpful.
 (define var-exp?
